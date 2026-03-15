@@ -1,0 +1,35 @@
+---
+- name: Apply CPU profile to DIGIT stack
+  hosts: targets
+  become: true
+  vars:
+    digit_dir: /opt/digit
+    cpu_profile: cpu-4  # Override with -e cpu_profile=cpu-2
+
+  tasks:
+    - name: Copy CPU profile override
+      copy:
+        src: "../profiles/{{ cpu_profile }}.yml"
+        dest: "{{ digit_dir }}/docker-compose.override.yml"
+        owner: ubuntu
+
+    - name: Stop DIGIT stack (preserve volumes)
+      shell: docker compose -f docker-compose.deploy.yaml -f docker-compose.override.yml down
+      args:
+        chdir: "{{ digit_dir }}"
+      become_user: ubuntu
+
+    - name: Start DIGIT stack with CPU profile
+      shell: docker compose -f docker-compose.deploy.yaml -f docker-compose.override.yml up -d
+      args:
+        chdir: "{{ digit_dir }}"
+      become_user: ubuntu
+
+    - name: Wait for Kong health (up to 5 min)
+      uri:
+        url: "http://127.0.0.1:18000/user/health"
+        status_code: 200
+      register: health
+      retries: 30
+      delay: 10
+      until: health.status == 200
