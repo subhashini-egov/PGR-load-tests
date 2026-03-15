@@ -1,0 +1,5 @@
+results/*
+!results/.gitkeep
+keys/
+k6/config/environments.js
+*.tar.gz
