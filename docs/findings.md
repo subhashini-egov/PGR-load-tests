@@ -106,7 +106,7 @@ At low record counts, dev and prod perform nearly identically — the workload i
 
 ## Resource Profile Ramp Tests (0→300 VUs, Empty Database)
 
-Continuous ramp from 0 to 300 virtual users over 10 minutes, testing CPU-constrained profiles on both machines. Each transaction is a full PGR lifecycle (CREATE → ASSIGN → RESOLVE → SEARCH).
+Continuous ramp from 0 to 300 virtual users over 10 minutes, testing CPU-constrained profiles on both machines. Charts show **server latency** (`http_req_duration`) — actual API response time, excluding think time between calls.
 
 ![Ramp 0-300 VU comparison — Empty DB](/ramp-300vu-empty-db.png)
 
@@ -115,7 +115,18 @@ Continuous ramp from 0 to 300 virtual users over 10 minutes, testing CPU-constra
 - **8c-16g on prod (16 vCPU)**: Errors appear at ~250 VUs (~15% at 300 VUs). CPU limits are tighter relative to machine capacity.
 - **8c-16g on dev (8 vCPU)**: Clean run — 99.8% success at 300 VUs. The 8-core budget matches the machine's actual capacity.
 - **16c-32g on prod (16 vCPU)**: Clean run — 100% success, no errors. Full machine capacity handles 300 VUs.
-- All profiles cross the 15s transaction threshold by ~20-30 VUs due to think time in the test (1-3s per API call).
+
+### With 1M Records (Prod)
+
+Same ramp test on the prod machine with 1,010,554 PGR complaints in the database. Dashed lines show empty-DB results for comparison.
+
+![Ramp 0-300 VU comparison — 1M Records vs Empty DB](/ramp-300vu-1M-comparison.png)
+
+**Key observations:**
+- **1M records adds ~5-10s latency** at all VU levels compared to empty DB
+- **8c-16g with 1M records**: Errors start at ~80 VUs, reaching ~25% at 300 VUs. Degradation point much earlier than empty DB.
+- **16c-32g with 1M records**: Stays clean up to ~250 VUs, then errors begin. Extra CPU headroom handles the heavier DB queries.
+- The latency gap between empty and 1M grows with VU count — DB queries compound under concurrent load.
 
 ## Database Performance Issues
 
