@@ -1,6 +1,6 @@
 # Executive Summary
 
-A single-machine DIGIT deployment can handle **544,000 complaint transactions per day** at 1 million records — **54x the 10,000/day target**. We found and fixed 3 critical database performance bugs along the way.
+A single-machine DIGIT deployment can handle **544,000 complaint transactions per day** at 1 million records — **54x the 10,000/day target**. Three database performance issues were identified and fixed along the way.
 
 ## Key Numbers
 
@@ -11,7 +11,7 @@ A single-machine DIGIT deployment can handle **544,000 complaint transactions pe
 | Throughput at 1M records | 6.3 lifecycles/sec |
 | Max concurrent users (16 vCPU) | ~300 |
 | Max concurrent users (8 vCPU) | ~250 |
-| Database bugs found | 3 critical |
+| Performance issues identified | 3 |
 | Throughput recovery after fixes | **9.4x** |
 | Records tested at | 1,006,743 complaints |
 
@@ -23,23 +23,23 @@ Every test iteration runs one complete PGR complaint lifecycle — **4 API calls
 
 This exercises Kong, PGR Services, Workflow, Persister, Kafka, and Postgres — the entire hot path.
 
-## What We Found
+## Performance Issues Identified
 
-As the database grew past 100K records, throughput dropped **5.2x** (from 27/s to 5/s). Root cause analysis revealed 3 bugs:
+As the database grew past 100K records, throughput dropped **5.2x** (from 27/s to 5/s). Root cause analysis revealed 3 issues:
 
-### Bug 1: Missing Database Index (200x improvement)
+### 1. Missing Database Index (200x improvement)
 
 The PGR address table has a foreign key but no index on it. Every complaint lookup scans the entire table. One `CREATE INDEX` statement fixes it.
 
-### Bug 2: Wrong Query Operator in Workflow (769x improvement potential)
+### 2. Workflow Fuzzy Search Default (769x improvement)
 
-The workflow service uses `LIKE '%businessId%'` instead of `= businessId` for exact-match lookups. This forces sequential table scans instead of index lookups. A GIN trigram index provides a **32x** workaround, but the proper fix — changing `LIKE` to `=` in the Java code — would yield **769x** improvement.
+The workflow service has a `isFuzzyEnabled` flag (default: `true`) that uses `LIKE '%businessId%'` instead of `= businessId` for exact-match lookups. This forces sequential table scans instead of index lookups. Setting `isFuzzyEnabled=false` uses the existing `IN` code path with btree indexes.
 
-::: warning Recommended Upstream Fix
-Change `LIKE ANY(ARRAY[...])` to `= ANY(ARRAY[...])` in `egov-workflow-v2` → `WorkflowRepository.java`. BusinessIds are exact values, not patterns.
+::: tip Fix
+Set `EGOV_WF_FUZZYSEARCH_ISFUZZYENABLED=false` in your deployment config. See [PR #248](https://github.com/egovernments/Citizen-Complaint-Resolution-System/pull/248).
 :::
 
-### Bug 3: JIT Compilation Overhead (4.3x improvement)
+### 3. JIT Compilation Overhead (4.3x improvement)
 
 Postgres JIT compilation hurts simple OLTP queries — spending 324ms compiling for a 90ms query. Disabling JIT (`ALTER SYSTEM SET jit = off`) gives an immediate 4.3x boost.
 
@@ -64,7 +64,7 @@ With fixes applied, throughput degrades gracefully as records grow:
 | 500K | 14/s | 1.2M/day |
 | **1M** | **6.3/s** | **544K/day** |
 
-Even at 1M records, capacity is **54x** the 10K/day target. The remaining degradation is driven by the workflow `LIKE` query (Bug 2) — fixing it upstream would flatten this curve.
+Even at 1M records, capacity is **54x** the 10K/day target. The remaining degradation is driven by the workflow `LIKE` query — disabling fuzzy search would flatten this curve significantly.
 
 ## What To Do
 
@@ -72,35 +72,22 @@ Even at 1M records, capacity is **54x** the 10K/day target. The remaining degrad
 
 Run these SQL statements on any DIGIT Postgres instance:
 
+1. Apply the Flyway migration and config change from [PR #248](https://github.com/egovernments/Citizen-Complaint-Resolution-System/pull/248)
+2. Run these additional SQL statements on Postgres:
+
 ```sql
--- Fix Bug 1: missing FK index
-CREATE INDEX idx_eg_pgr_address_v2_parentid ON eg_pgr_address_v2 (parentid);
-
--- Fix Bug 2: GIN trigram workaround for LIKE ANY
-CREATE EXTENSION IF NOT EXISTS pg_trgm;
-CREATE INDEX idx_wf_pi_bizid_trgm
-  ON eg_wf_processinstance_v2 USING gin (businessid gin_trgm_ops);
-
 -- Supporting indexes for workflow queries
 CREATE INDEX idx_eg_wf_pi_v2_tenant_bsvc
   ON eg_wf_processinstance_v2 (tenantid, businessservice, lastmodifiedtime DESC);
 CREATE INDEX idx_wf_pi_tenant_bizid_time
   ON eg_wf_processinstance_v2 (tenantid, businessid, lastmodifiedtime DESC);
 
--- Fix Bug 3: disable JIT
+-- Disable JIT for OLTP workloads
 ALTER SYSTEM SET jit = off;
 SELECT pg_reload_conf();
 ```
 
 See [Detailed Findings](./findings) for full EXPLAIN plans and analysis.
-
-### For DIGIT Core Team (upstream fix)
-
-File a PR to change `egov-workflow-v2` → `WorkflowRepository.java`:
-- Replace `LIKE ANY(ARRAY[...])` with `= ANY(ARRAY[...])`
-- Remove the `%...%` wrapping of businessId parameters
-
-This eliminates the need for the GIN trigram index and would deliver 769x improvement on the hottest query path.
 
 ### For Developers (reproduce and extend)
 

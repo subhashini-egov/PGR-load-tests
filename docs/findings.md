@@ -11,11 +11,13 @@ Performance results from load testing DIGIT PGR with up to 1M records (March 202
 | Daily capacity at 1M | **544,320 transactions/day** |
 | VU ceiling (dev, 8 vCPU) | ~250 concurrent users |
 | VU ceiling (prod, 16 vCPU) | ~300 concurrent users |
-| Database bugs found | **3 critical** |
+| Performance issues identified | **3** |
 | Throughput recovery after fixes | **9.4x** |
 | Total records seeded | 1,006,743 complaints |
 
-The system comfortably exceeds a 10,000 txn/day target even at 1M records. Three database performance bugs were discovered that caused 5.2x throughput degradation as records grew. After fixing all three, throughput recovered to 37/s at 100K records. At 1M records, remaining degradation is caused by a fundamental query pattern in the workflow service that requires an upstream code change.
+The system comfortably exceeds a 10,000 txn/day target even at 1M records. Three database performance issues were identified that caused 5.2x throughput degradation as records grew. After fixing all three, throughput recovered to 37/s at 100K records. At 1M records, remaining degradation is caused by a query pattern in the workflow service that can be resolved by disabling fuzzy search.
+
+Fixes submitted in [PR #248](https://github.com/egovernments/Citizen-Complaint-Resolution-System/pull/248).
 
 ## Baseline Performance
 
@@ -44,11 +46,11 @@ At low record counts, dev and prod perform nearly identically — the workload i
 
 **VU ceilings:** Dev ~250, Prod ~300. Failures at the ceiling are caused by connection exhaustion and PgBouncer timeouts, not CPU.
 
-## Database Performance Bugs
+## Database Performance Issues
 
 Three root causes were identified by enabling Postgres slow query logging (`log_min_duration_statement = 100ms`) and analyzing query plans with `EXPLAIN (ANALYZE, BUFFERS)`.
 
-### Bug 1: Missing Foreign Key Index on `eg_pgr_address_v2.parentid`
+### 1. Missing Foreign Key Index on `eg_pgr_address_v2.parentid`
 
 The address table has a foreign key to `eg_pgr_service_v2(id)` but no index on the FK column. Every complaint fetch joins through this FK, triggering a sequential scan of the entire address table.
 
@@ -74,9 +76,9 @@ CREATE INDEX idx_eg_pgr_address_v2_parentid ON eg_pgr_address_v2 (parentid);
 
 **Impact: 200x improvement** on address lookups.
 
-### Bug 2: Workflow `LIKE ANY` Instead of `= ANY`
+### 2. Workflow Fuzzy Search Default
 
-The workflow service searches for process instances using `LIKE ANY(ARRAY['%businessId%', ...])`. Since businessIds are exact values (e.g., `PB-PGR-2026-03-16-105868`), the `%wildcards%` are unnecessary. But `LIKE` with leading wildcards defeats btree index usage, forcing a sequential scan of the entire workflow table.
+The workflow service has a `isFuzzyEnabled` config flag (default: `true`) that causes businessId queries to use `LIKE ANY(ARRAY['%businessId%', ...])`. Since businessIds are exact values (e.g., `PB-PGR-2026-03-16-105868`), the `%wildcards%` are unnecessary. `LIKE` with leading wildcards defeats btree index usage, forcing a sequential scan of the entire workflow table.
 
 This query runs 3-4 times per complaint lifecycle (it's the workflow status lookup), making it the dominant cost at scale.
 
@@ -106,9 +108,9 @@ CREATE INDEX idx_wf_pi_bizid_trgm
   ON eg_wf_processinstance_v2 USING gin (businessid gin_trgm_ops);
 ```
 
-**Impact: 32x improvement** with GIN workaround. An upstream code fix (`=` instead of `LIKE`) would yield **769x improvement**.
+**Impact: 32x improvement** with GIN workaround. Setting `isFuzzyEnabled=false` uses the existing `IN` code path with btree indexes for **769x improvement**.
 
-### Bug 3: JIT Compilation Overhead on OLTP Queries
+### 3. JIT Compilation Overhead on OLTP Queries
 
 Postgres JIT compilation is designed for complex analytical queries. On the simple OLTP queries in DIGIT, JIT spends more time compiling than the query takes to execute.
 
@@ -186,7 +188,7 @@ Throughput as a function of record count (all DB fixes applied, 50 VUs):
 | ~700K | ~1,400ms | ~12/s |
 | **1,006K** | **2,160ms** | **6.3/s** |
 
-The degradation is driven by the workflow `LIKE ANY` correlated subquery. Even with the GIN trigram index, the query cost grows with table size. An upstream fix to use `= ANY` would flatten this curve significantly.
+The degradation is driven by the workflow `LIKE ANY` correlated subquery. Even with the GIN trigram index, the query cost grows with table size. Disabling fuzzy search (`isFuzzyEnabled=false`) switches to `IN` queries with btree indexes, which would flatten this curve significantly.
 
 ## Recommended SQL Indexes
 
@@ -219,22 +221,23 @@ ALTER SYSTEM SET log_min_duration_statement = 100;
 SELECT pg_reload_conf();
 ```
 
-## Recommended Upstream Fix
+## Recommended Configuration Change
 
 The single most impactful change for DIGIT performance at scale:
 
-**File:** `egov-workflow-v2` → `WorkflowRepository.java`
+Set `EGOV_WF_FUZZYSEARCH_ISFUZZYENABLED=false` in your workflow service deployment config (Docker Compose env or Helm values).
 
-**Change:** Replace `LIKE ANY(ARRAY[...])` with `= ANY(ARRAY[...])` in process instance search queries, and remove the `%...%` wrapping of businessId values.
+This switches from `LIKE ANY(ARRAY['%id%', ...])` to `IN (...)` queries, which use standard btree indexes.
 
 **Impact at 300K workflow rows:**
 
-| Current | Fixed | Improvement |
-|---------|-------|-------------|
-| 100ms (seq scan) | 0.13ms (btree) | **769x** |
-| 3.1ms (GIN workaround) | 0.13ms (btree) | **24x** |
+| Config | Query Time | Improvement |
+|--------|-----------|-------------|
+| `isFuzzyEnabled=true` (default) | 100ms (seq scan) | - |
+| `isFuzzyEnabled=true` + GIN trigram index | 3.1ms | 32x |
+| `isFuzzyEnabled=false` (recommended) | 0.13ms (btree) | **769x** |
 
-BusinessIds are exact values (`PB-PGR-2026-03-16-105868`), not patterns. The wildcards serve no purpose.
+This fix is included in [PR #248](https://github.com/egovernments/Citizen-Complaint-Resolution-System/pull/248) for both Docker Compose and Helm chart deployments.
 
 ## Operational Lessons
 

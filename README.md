@@ -2,7 +2,7 @@
 
 k6-based load testing for the DIGIT PGR (Public Grievance Redressal) service running on a Docker Compose stack.
 
-This repo was used to evaluate whether a single-machine DIGIT deployment can sustain 10,000+ complaint transactions per day. The answer: **yes, comfortably** — even at 1M records, the system handles 544K txn/day after database optimizations. Along the way, 3 critical database performance bugs were discovered and fixed.
+This repo was used to evaluate whether a single-machine DIGIT deployment can sustain 10,000+ complaint transactions per day. The answer: **yes, comfortably** — even at 1M records, the system handles 544K txn/day after database optimizations. Three performance issues were identified and fixes submitted in [PR #248](https://github.com/egovernments/Citizen-Complaint-Resolution-System/pull/248).
 
 ## Key Results
 
@@ -13,7 +13,7 @@ This repo was used to evaluate whether a single-machine DIGIT deployment can sus
 | Peak throughput (empty DB) | 37 lifecycles/sec |
 | Throughput at 1M records | 6.3 lifecycles/sec |
 | Daily capacity at 1M records | **544,320 txn/day** |
-| Database bugs found | 3 (missing FK index, `LIKE ANY` instead of `= ANY`, JIT overhead) |
+| Performance issues fixed | 3 (missing FK index, workflow fuzzy search default, JIT overhead) |
 | Throughput recovery after fixes | **9.4x** |
 
 ## Repository Structure
