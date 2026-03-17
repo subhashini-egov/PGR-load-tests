@@ -108,7 +108,7 @@ At low record counts, dev and prod perform nearly identically — the workload i
 
 Continuous ramp from 0 to 300 virtual users over 10 minutes, testing CPU-constrained profiles on both machines. Each transaction is a full PGR lifecycle (CREATE → ASSIGN → RESOLVE → SEARCH).
 
-![Ramp 0-300 VU comparison — Empty DB](/PGR-load-tests/ramp-300vu-empty-db.png)
+![Ramp 0-300 VU comparison — Empty DB](/ramp-300vu-empty-db.png)
 
 **Key observations:**
 - **4c-8g on dev (8 vCPU)**: Errors spike above 200 VUs (~80% error rate at 250+ VUs). Degradation point: ~150 VUs.
