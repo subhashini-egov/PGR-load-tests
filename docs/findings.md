@@ -2,6 +2,64 @@
 
 Performance results from load testing DIGIT PGR with up to 1M records (March 2026).
 
+## Testing Methodology
+
+### Tool
+
+All tests use [k6](https://k6.io/) (Grafana), an open-source load testing tool. k6 runs from a control machine and drives HTTP traffic against the DIGIT stack over SSH tunnels.
+
+### What Each Virtual User Does
+
+Each k6 **virtual user (VU)** runs a complete PGR complaint lifecycle — 4 sequential API calls through the full stack:
+
+```
+CREATE (file complaint) → ASSIGN (route to dept) → RESOLVE (close) → SEARCH (verify)
+```
+
+Between each API call, the VU waits 1-3 seconds (random think time) to simulate realistic user pacing. One full lifecycle takes ~8-15 seconds depending on server load.
+
+### How to Read "Concurrent Users"
+
+A VU is **not** the same as "users online." In our tests:
+
+- **1 VU** = 1 user actively performing a complaint workflow end-to-end, non-stop
+- **Real users** spend most of their time reading, navigating, and thinking — not making API calls
+
+A real user might make one complaint every few minutes. A VU makes one every ~10 seconds. So **1 VU ≈ 20-30 real concurrent users** in terms of API load.
+
+When we say "300 VUs," the equivalent real-world concurrency is roughly **6,000-9,000 users online simultaneously**, each occasionally filing or checking complaints.
+
+For a more precise mapping, use TPS (transactions per second) as the common unit:
+- Our tests report **throughput in lifecycles/sec** (each lifecycle = 4 API calls)
+- Multiply by 4 to get TPS across all APIs
+- Compare against your expected TPS from real user analytics
+
+### Test Profiles
+
+| Scenario | Duration | Ramp Pattern | Purpose |
+|----------|----------|-------------|---------|
+| `ramp-300vu` | 12.5 min | 2 min warmup (5 VUs), then linear 0→300 VUs over 10 min, 30s cooldown | Find degradation point under load |
+| `ramp-50vu` | 12 min | 2 min warmup, ramp to 50 VUs, 5 min hold, ramp down | Steady-state performance |
+| `burst` | configurable | Instant jump to N VUs, hold | Find breaking point |
+| `seed-1m` | ~13 hours | 50 VUs, 540K iterations, no think time | Populate DB with 1M records |
+
+### Resource Profiles
+
+CPU limits are applied to running containers via `docker update` (no restart needed). Memory limits are defined in profiles but only applied at stack startup via Docker Compose overlay.
+
+| Profile | Total CPU | Total Memory | Target Machine |
+|---------|-----------|-------------|----------------|
+| `4c-8g` | 4 vCPU | 8 GB | Dev (8 vCPU/16 GB) |
+| `8c-16g` | 8 vCPU | 16 GB | Both |
+| `16c-32g` | 16 vCPU | 32 GB | Prod (16 vCPU/32 GB) |
+
+### Test Machines
+
+| Machine | Specs | Role |
+|---------|-------|------|
+| Dev | 8 vCPU, 16 GB RAM (AWS EC2) | Constrained-resource testing |
+| Prod | 16 vCPU, 32 GB RAM (AWS EC2) | Full-scale testing, 1M record DB |
+
 ## Executive Summary
 
 | Metric | Value |
