@@ -3,27 +3,27 @@ layout: home
 
 hero:
   name: DIGIT Load Tests
-  text: PGR Service Performance Testing
-  tagline: k6 load tests, CPU profiling, and infrastructure automation for the DIGIT PGR complaint lifecycle.
+  text: 544K txn/day at 1M records
+  tagline: "Load tested the DIGIT PGR complaint lifecycle. Found 3 critical database bugs. Fixed them for a 9.4x throughput recovery."
   actions:
     - theme: brand
-      text: Architecture
-      link: /architecture
+      text: Executive Summary
+      link: /executive-summary
     - theme: alt
-      text: Running Tests
-      link: /running-tests
+      text: Detailed Findings
+      link: /findings
 
 features:
-  - title: Architecture
-    details: Test design, complaint lifecycle, scenario types, CPU profiling, and infrastructure overview.
-    link: /architecture
-  - title: Running Tests
-    details: How to run individual tests, the full matrix, interpret results, and troubleshoot issues.
-    link: /running-tests
-  - title: Setup
-    details: Machine provisioning, Docker Compose stack, database preparation, and test user creation.
-    link: /setup
-  - title: Findings
-    details: Performance bottlenecks discovered, root causes, fixes applied, and before/after results.
+  - title: "Executive Summary"
+    details: Key numbers, what we found, what to do about it. Start here.
+    link: /executive-summary
+  - title: "Detailed Findings"
+    details: Database bugs with EXPLAIN plans, SQL fixes, degradation curves, and the recommended upstream fix.
     link: /findings
+  - title: "Architecture"
+    details: How the tests are designed — PGR lifecycle, scenario types, CPU profiling, infrastructure.
+    link: /architecture
+  - title: "Setup & Running"
+    details: Machine provisioning, k6 configuration, running tests, and troubleshooting.
+    link: /setup
 ---
