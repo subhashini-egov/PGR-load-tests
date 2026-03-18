@@ -60,31 +60,31 @@ export const options = {
   scenarios: {
     variable_throughput: {
       executor: 'ramping-arrival-rate',
-      startRate: 5,
+      startRate: 1,
       timeUnit: '1s',
-      preAllocatedVUs: 400,
-      maxVUs: 500,
+      preAllocatedVUs: 300,
+      maxVUs: 400,
       stages: [
-        // Warmup
-        { target: 5,   duration: '1m' },
+        // Warmup: ~1 lifecycle/sec
+        { target: 1,  duration: '1m' },
 
-        // Spike 1: sudden burst
-        { target: 150, duration: '30s' },
+        // Spike 1: sudden burst to ~15 lifecycles/sec (~60 API calls/sec)
+        { target: 15, duration: '30s' },
         // Valley 1: sharp drop, services go idle
-        { target: 10,  duration: '2m' },
+        { target: 1,  duration: '2m' },
 
-        // Spike 2: bigger burst after idle (cold-start trigger)
-        { target: 250, duration: '30s' },
+        // Spike 2: bigger burst after idle (~25 lifecycles/sec)
+        { target: 25, duration: '30s' },
         // Valley 2: another lull
-        { target: 15,  duration: '2m' },
+        { target: 2,  duration: '2m' },
 
-        // Spike 3: peak burst
-        { target: 300, duration: '30s' },
-        // Sustained moderate load
-        { target: 100, duration: '3m' },
+        // Spike 3: peak burst (~35 lifecycles/sec, near system max)
+        { target: 35, duration: '30s' },
+        // Sustained moderate load (~10 lifecycles/sec)
+        { target: 10, duration: '3m' },
 
         // Cooldown
-        { target: 0,   duration: '30s' },
+        { target: 0,  duration: '30s' },
       ],
     },
   },

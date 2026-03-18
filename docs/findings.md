@@ -39,7 +39,7 @@ For a more precise mapping, use TPS (transactions per second) as the common unit
 | Scenario | Duration | Ramp Pattern | Purpose |
 |----------|----------|-------------|---------|
 | `ramp-300vu` | 12.5 min | 2 min warmup (5 VUs), then linear 0→300 VUs over 10 min, 30s cooldown | Find degradation point under load |
-| `variable-throughput` | 10 min | Spike/valley pattern: 5→150→10→250→15→300→100→0 req/s | Realistic bursty traffic, cold-start failures |
+| `variable-throughput` | 10 min | Spike/valley pattern: 1→15→1→25→2→35→10→0 lifecycles/s | Realistic bursty traffic, cold-start failures |
 | `ramp-50vu` | 12 min | 2 min warmup, ramp to 50 VUs, 5 min hold, ramp down | Steady-state performance |
 | `burst` | configurable | Instant jump to N VUs, hold | Find breaking point |
 | `seed-1m` | ~13 hours | 50 VUs, 540K iterations, no think time | Populate DB with 1M records |
@@ -136,27 +136,27 @@ In addition to the linear ramp, we run a **variable throughput** test that model
 ### Load Shape
 
 ```
-Rate (req/s)
-300 ┤                              ╭─╮
-250 ┤                  ╭─╮         │ │
-150 ┤       ╭─╮        │ │         │ │
-100 ┤       │ │        │ │         │ ╰─────────╮
- 15 ┤       │ ╰────────╯ ╰────────╯            │
-  5 ┤───────╯                                   ╰──
+Lifecycles/s
+ 35 ┤                              ╭─╮
+ 25 ┤                  ╭─╮         │ │
+ 15 ┤       ╭─╮        │ │         │ │
+ 10 ┤       │ │        │ │         │ ╰─────────╮
+  2 ┤       │ ╰────────╯ ╰────────╯            │
+  1 ┤───────╯                                   ╰──
     └──┬──┬──┬──────┬──┬──────┬──┬──────────┬──────
       warmup S1  valley1  S2  valley2  S3  sustained
 ```
 
-| Phase | Duration | Rate | What it tests |
-|-------|----------|------|---------------|
-| Warmup | 1 min | 5/s | Baseline, cache warming |
-| Spike 1 | 30s | →150/s | Sudden burst handling |
-| Valley 1 | 2 min | →10/s | Services go idle, connections drain |
-| Spike 2 | 30s | →250/s | Cold-start after idle — the worst case |
-| Valley 2 | 2 min | →15/s | Second idle period |
-| Spike 3 | 30s | →300/s | Peak burst at full rate |
-| Sustained | 3 min | →100/s | Steady-state after stress, GC pressure check |
-| Cooldown | 30s | →0/s | Queue drain |
+| Phase | Duration | Rate (lifecycles/s) | ~API calls/s | What it tests |
+|-------|----------|---------------------|-------------|---------------|
+| Warmup | 1 min | 1/s | ~4 | Baseline, cache warming |
+| Spike 1 | 30s | →15/s | ~60 | Sudden burst handling |
+| Valley 1 | 2 min | →1/s | ~4 | Services go idle, connections drain |
+| Spike 2 | 30s | →25/s | ~100 | Cold-start after idle — the worst case |
+| Valley 2 | 2 min | →2/s | ~8 | Second idle period |
+| Spike 3 | 30s | →35/s | ~140 | Peak burst near system max |
+| Sustained | 3 min | →10/s | ~40 | Steady-state after stress, GC pressure check |
+| Cooldown | 30s | →0/s | 0 | Queue drain |
 
 ### What This Catches That Ramp Tests Don't
 
