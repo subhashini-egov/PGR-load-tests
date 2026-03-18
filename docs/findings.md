@@ -39,6 +39,7 @@ For a more precise mapping, use TPS (transactions per second) as the common unit
 | Scenario | Duration | Ramp Pattern | Purpose |
 |----------|----------|-------------|---------|
 | `ramp-300vu` | 12.5 min | 2 min warmup (5 VUs), then linear 0→300 VUs over 10 min, 30s cooldown | Find degradation point under load |
+| `variable-throughput` | 10 min | Spike/valley pattern: 5→150→10→250→15→300→100→0 req/s | Realistic bursty traffic, cold-start failures |
 | `ramp-50vu` | 12 min | 2 min warmup, ramp to 50 VUs, 5 min hold, ramp down | Steady-state performance |
 | `burst` | configurable | Instant jump to N VUs, hold | Find breaking point |
 | `seed-1m` | ~13 hours | 50 VUs, 540K iterations, no think time | Populate DB with 1M records |
@@ -127,6 +128,44 @@ Same ramp test on the prod machine with 1,010,554 PGR complaints in the database
 - **8c-16g with 1M records**: Errors start at ~80 VUs, reaching ~25% at 300 VUs. Degradation point much earlier than empty DB.
 - **16c-32g with 1M records**: Stays clean up to ~250 VUs, then errors begin. Extra CPU headroom handles the heavier DB queries.
 - The latency gap between empty and 1M grows with VU count — DB queries compound under concurrent load.
+
+## Variable Throughput Test (Spike/Valley Pattern)
+
+In addition to the linear ramp, we run a **variable throughput** test that models realistic bursty traffic. Instead of controlling virtual users, this test controls the **request arrival rate** directly using k6's `ramping-arrival-rate` executor.
+
+### Load Shape
+
+```
+Rate (req/s)
+300 ┤                              ╭─╮
+250 ┤                  ╭─╮         │ │
+150 ┤       ╭─╮        │ │         │ │
+100 ┤       │ │        │ │         │ ╰─────────╮
+ 15 ┤       │ ╰────────╯ ╰────────╯            │
+  5 ┤───────╯                                   ╰──
+    └──┬──┬──┬──────┬──┬──────┬──┬──────────┬──────
+      warmup S1  valley1  S2  valley2  S3  sustained
+```
+
+| Phase | Duration | Rate | What it tests |
+|-------|----------|------|---------------|
+| Warmup | 1 min | 5/s | Baseline, cache warming |
+| Spike 1 | 30s | →150/s | Sudden burst handling |
+| Valley 1 | 2 min | →10/s | Services go idle, connections drain |
+| Spike 2 | 30s | →250/s | Cold-start after idle — the worst case |
+| Valley 2 | 2 min | →15/s | Second idle period |
+| Spike 3 | 30s | →300/s | Peak burst at full rate |
+| Sustained | 3 min | →100/s | Steady-state after stress, GC pressure check |
+| Cooldown | 30s | →0/s | Queue drain |
+
+### What This Catches That Ramp Tests Don't
+
+- **Cold-start failures**: JVM warmup, connection pool spinup after idle periods
+- **Kafka consumer rebalance**: persister lag spikes when load drops then surges
+- **Memory leaks under stress**: accumulated GC pressure visible in sustained phase
+- **Queue drain behavior**: do in-flight requests complete cleanly after spikes?
+
+Results from this test are tagged by phase (spike/valley/sustained) for per-phase metric breakdown.
 
 ## Database Performance Issues
 
