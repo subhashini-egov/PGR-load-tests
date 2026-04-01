@@ -547,6 +547,35 @@
         name: nginx
         state: restarted
 
+    - name: Create k6 environments.js for this deployment
+      copy:
+        dest: /root/PGR-load-tests/k6/config/environments.js
+        content: |
+          export const ENVS = {
+            dev: {
+              baseUrl: 'http://127.0.0.1:18000',
+              tenant: '{{ city_tenant }}',
+              stateTenant: '{{ tenant_id }}',
+              username: __ENV.DIGIT_USERNAME || '{{ loadtest_username }}',
+              password: __ENV.DIGIT_PASSWORD || '{{ admin_password }}',
+              serviceCodes: [
+                'StreetLightNotWorking', 'NoStreetlight', 'GarbageNeedsTobeCleared',
+                'BurningOfGarbage', 'DamagedGarbageBin', 'NonSweepingOfRoad',
+              ],
+            },
+          };
+          export function getEnv() {
+            const target = __ENV.TARGET || 'dev';
+            const env = ENVS[target];
+            if (!env) throw new Error(`Unknown target: ${target}`);
+            return env;
+          }
+
+    - name: Make run-test.sh executable
+      file:
+        path: /root/PGR-load-tests/scripts/run-test.sh
+        mode: "0755"
+
     # ── Phase 9: Smoke test ───────────────────────────────────────────
     - name: Verify login via nginx proxy
       uri:
