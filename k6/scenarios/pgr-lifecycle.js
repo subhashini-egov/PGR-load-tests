@@ -14,8 +14,9 @@ let employeeToken = null;
 let employeeUserInfo = null;
 let employeeUUID = null;
 
-// All 33 PGR ServiceDefs from full-dump.sql — each VU/iteration uses a different one
-const SERVICE_CODES = [
+// All 33 PGR ServiceDefs from full-dump.sql — each VU/iteration uses a different one.
+// Override via env config `serviceCodes` for deployments with fewer ServiceDefs loaded.
+const ALL_SERVICE_CODES = [
   'StreetLightNotWorking',
   'NoStreetlight',
   'GarbageNeedsTobeCleared',
@@ -50,6 +51,11 @@ const SERVICE_CODES = [
   'IllegalShopsOnFootPath',
   'Others',
 ];
+
+const SERVICE_CODES = (() => {
+  const env = getEnv();
+  return env.serviceCodes || ALL_SERVICE_CODES;
+})();
 
 // Per-VU iteration counter for rotating service codes
 let iterationCount = 0;
