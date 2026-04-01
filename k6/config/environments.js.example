@@ -8,6 +8,13 @@ export const ENVS = {
     stateTenant: 'statea',
     username: __ENV.DIGIT_USERNAME || 'ADMIN',
     password: __ENV.DIGIT_PASSWORD || 'eGov@123',
+    // Optional: override PGR ServiceDefs used in load tests.
+    // Omit to use all 33 default service codes (requires full-dump.sql data).
+    // For minimal/k8s deployments with only default-data-handler bootstrap data:
+    // serviceCodes: [
+    //   'StreetLightNotWorking', 'NoStreetlight', 'GarbageNeedsTobeCleared',
+    //   'BurningOfGarbage', 'DamagedGarbageBin', 'NonSweepingOfRoad',
+    // ],
   },
   prod: {
     baseUrl: 'http://<PROD_IP>:18000',
