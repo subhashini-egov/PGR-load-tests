@@ -54,7 +54,8 @@ const ALL_SERVICE_CODES = [
 
 const SERVICE_CODES = (() => {
   const env = getEnv();
-  return env.serviceCodes || ALL_SERVICE_CODES;
+  const svc = env.serviceCodes;
+  return (Array.isArray(svc) && svc.length > 0) ? svc : ALL_SERVICE_CODES;
 })();
 
 // Per-VU iteration counter for rotating service codes
