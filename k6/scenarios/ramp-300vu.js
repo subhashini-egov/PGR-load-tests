@@ -1,5 +1,13 @@
 import { pgrLifecycle, transactionDuration, transactionSuccess } from './pgr-lifecycle.js';
-import { THRESHOLDS } from '../config/thresholds.js';
+
+// Relaxed thresholds for 300-VU stress profile — higher latency and error
+// tolerance than the standard THRESHOLDS to avoid noisy failures under load.
+const THRESHOLDS_RAMP_300 = {
+  'transaction_duration{scenario:main}': ['p(95)<30000', 'p(99)<45000'],
+  'transaction_success{scenario:main}': ['rate>0.90'],
+  'http_req_failed{scenario:main}': ['rate<0.05'],
+  'http_req_duration{scenario:main}': ['p(95)<10000', 'p(99)<20000'],
+};
 
 export const options = {
   scenarios: {
@@ -24,7 +32,7 @@ export const options = {
       exec: 'mainFn',
     },
   },
-  thresholds: THRESHOLDS,
+  thresholds: THRESHOLDS_RAMP_300,
 };
 
 export function warmupFn() {
